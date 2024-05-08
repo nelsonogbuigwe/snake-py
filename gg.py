@@ -1,14 +1,23 @@
 import pygame
 import random
-import os
 import time
+import movement
+
+# todo: add collision with obstacles
+#       increase grid size and games speed
+#       collision with self and walls
+#       periodically re-generate obstacles, vary size,position,time
+
+
+# stack for move history
+moves = movement.MovementStack()
 
 # Constants
-SCREEN_WIDTH = 1000  # Increased screen width
-SCREEN_HEIGHT = 800  # Increased screen height
-GRID_SIZE = 25  # Increased grid size
-FPS = 10  # Reduced frame rate for slower snake movement
-INITIAL_SPEED = 5  # Reduced initial speed
+SCREEN_WIDTH = 800  # Increased screen width
+SCREEN_HEIGHT = 600  # Increased screen height
+GRID_SIZE = 33  # Increased grid size
+FPS = 14  # Reduced frame rate for slower snake movement
+INITIAL_SPEED = 7  # Reduced initial speed
 SPEED_INCREASE_THRESHOLD = 5
 FOOD_POINTS = {'small': 1, 'medium': 2, 'large': 3}
 FOOD_SIZES = {'small': 1, 'medium': 2, 'large': 3}
@@ -17,6 +26,7 @@ SHRINK_AMOUNT = 1
 
 # Colors
 WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
@@ -30,6 +40,7 @@ class SnakeGame:
         pygame.display.set_caption("Snake Game")
         self.clock = pygame.time.Clock()
         self.snake = [(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)]
+        self.snake_body_image = None
         self.direction = 'RIGHT'
         self.difficulty = 'normal'  # Initial difficulty level
         self.food = []
@@ -65,9 +76,11 @@ class SnakeGame:
         self.obstacle_image = pygame.transform.scale(self.obstacle_image, (GRID_SIZE, GRID_SIZE))
 
     def opening_menu(self):
-        menu_bg = pygame.image.load("menu_bg.jpg")  # Background image for the menu
-        menu_bg = pygame.transform.scale(menu_bg, (SCREEN_WIDTH, SCREEN_HEIGHT))  # Resize background image
-        self.screen.blit(menu_bg, (0, 0))  # Draw background image
+
+        ##menu_bg = pygame.image.load("menu_bg.jpg")  # Background image for the menu
+        ##menu_bg = pygame.transform.scale(menu_bg, (SCREEN_WIDTH, SCREEN_HEIGHT))  # Resize background image
+        ##self.screen.blit(menu_bg, (0, 0))  # Draw background image
+
         menu_font = pygame.font.SysFont(None, 50)
         menu_text = menu_font.render("Press Enter to Start", True, WHITE)
         self.screen.blit(menu_text, (SCREEN_WIDTH // 2 - menu_text.get_width() // 2, SCREEN_HEIGHT // 2))
@@ -81,6 +94,11 @@ class SnakeGame:
                     elif event.key == pygame.K_ESCAPE:
                         pygame.quit()
                         quit()
+
+    def save_highest_score(self):
+        file_name = f"highest_score_{self.difficulty}.txt"
+        with open(file_name, "w") as file:
+            file.write(str(max(self.score, self.highest_score)))
 
     def load_highest_score(self):
         file_name = f"highest_score_{self.difficulty}.txt"
@@ -118,6 +136,31 @@ class SnakeGame:
         self.food_size = random.choice(list(FOOD_SIZES.keys()))  # Random food size
         return (x, y, self.food_size)
 
+    def rotate_snake_body(self):
+        if len(moves) > 0:
+            current_direction = moves.get()
+        else:
+            current_direction = self.direction
+
+        if self.direction == 'UP' and current_direction == 'LEFT':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, -90)
+        elif self.direction == 'UP' and current_direction == 'RIGHT':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, 90)
+        elif self.direction == 'DOWN' and current_direction == 'LEFT':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, 90)
+        elif self.direction == 'DOWN' and current_direction == 'RIGHT':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, -90)
+        elif self.direction == 'LEFT' and current_direction == 'UP':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, 90)
+        elif self.direction == 'LEFT' and current_direction == 'DOWN':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, -90)
+        elif self.direction == 'RIGHT' and current_direction == 'UP':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, -90)
+        elif self.direction == 'RIGHT' and current_direction == 'DOWN':
+            self.snake_body_image = pygame.transform.rotate(self.snake_body_image, 90)
+        
+        moves.push(self.direction)
+
     def move(self):
         if self.is_paused:
             return
@@ -126,12 +169,16 @@ class SnakeGame:
         x, y = head
         if self.direction == 'UP':
             y -= GRID_SIZE
+            self.rotate_snake_body()
         elif self.direction == 'DOWN':
             y += GRID_SIZE
+            self.rotate_snake_body()
         elif self.direction == 'LEFT':
             x -= GRID_SIZE
+            self.rotate_snake_body()
         elif self.direction == 'RIGHT':
             x += GRID_SIZE
+            self.rotate_snake_body()
 
         for f in self.food:
             if (x, y) == f[:2]:
@@ -148,12 +195,11 @@ class SnakeGame:
 
         if self.food_size != 'small':
             self.timer_start = time.time()
-
         if (
-            x < 0 or x >= SCREEN_WIDTH or
-            y < 0 or y >= SCREEN_HEIGHT or
-            (x, y) in self.snake[1:] or
-            (x, y) in self.obstacles
+                x < 0 or x >= SCREEN_WIDTH or
+                y < 0 or y >= SCREEN_HEIGHT or
+                (x, y) in self.snake[1:] or
+                (x, y) in self.obstacles
         ):
             if time.time() - self.timer_start > self.settings['collision_delay']:
                 self.game_over = True
@@ -185,7 +231,7 @@ class SnakeGame:
                     self.is_paused = not self.is_paused
 
     def draw(self):
-        self.screen.fill(WHITE)
+        self.screen.fill(BLACK)
         for segment in self.snake:
             self.screen.blit(self.snake_body_image, (segment[0], segment[1]))
         for f in self.food:
@@ -209,16 +255,20 @@ class SnakeGame:
         score_text = self.font.render(f"Score: {self.score}", True, RED)
         highest_score_text = self.font.render(f"Highest Score: {self.highest_score}", True, RED)
         restart_text = self.font.render("Press R to restart", True, BLUE)
-        self.screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, SCREEN_HEIGHT//2 - game_over_text.get_height()//2 - 30))
-        self.screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, SCREEN_HEIGHT//2 - score_text.get_height()//2))
-        self.screen.blit(highest_score_text, (SCREEN_WIDTH//2 - highest_score_text.get_width()//2, SCREEN_HEIGHT//2 - highest_score_text.get_height()//2 + 30))
-        self.screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT//2 - restart_text.get_height()//2 + 60))
+        self.screen.blit(game_over_text, (SCREEN_WIDTH // 2 - game_over_text.get_width() // 2,
+                                          SCREEN_HEIGHT // 2 - game_over_text.get_height() // 2 - 30))
+        self.screen.blit(score_text, (
+        SCREEN_WIDTH // 2 - score_text.get_width() // 2, SCREEN_HEIGHT // 2 - score_text.get_height() // 2))
+        self.screen.blit(highest_score_text, (SCREEN_WIDTH // 2 - highest_score_text.get_width() // 2,
+                                              SCREEN_HEIGHT // 2 - highest_score_text.get_height() // 2 + 30))
+        self.screen.blit(restart_text, (
+        SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 - restart_text.get_height() // 2 + 60))
         pygame.display.update()
 
     def reset_game(self):
         self.snake = [(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)]
         self.direction = 'RIGHT'
-        self.food = []
+        self.food = [self.place_food()]
         self.obstacles = self.generate_obstacles()
         self.score = 0
         self.game_over = False
@@ -243,6 +293,8 @@ class SnakeGame:
                         self.reset_game()
                         pygame.quit()
                         self.run()
+
+
 
 # Entry point of the program
 if __name__ == "__main__":
