@@ -1,0 +1,48 @@
+# pygbag.toml
+
+[build]
+name = "pysnake"             # Name of your game
+emsdk_version = "latest"     # Emscripten version (use "latest" or a specific version)
+debug = false                # Set to true for debugging information
+preload_files = ["assets/"]  # Preload all files in the "assets" directory
+enable_sim = true
+
+# memory settings
+[memory]
+total_memory = 16777216 # 16 MB memory
+static_bump = 1024
+
+# assets config
+[assets]
+[[assets]]
+pattern = "assets/**/*"  # include all files in the "assets" directory
+
+[[assets.copy]]  # Copy these files directly
+from = "assets/snake_body.png"
+to = "snake_body.png"
+[[assets.copy]]
+from = "assets/obstacle.png"
+to = "obstacle.png"
+[[assets.copy]]
+from = "assets/food.png"
+to = "food.png"
+
+[[assets.copy]]  # Copy sounds directly
+from = "assets/eat.wav"
+to = "eat.wav"
+[[assets.copy]]
+from = "assets/game_over.wav"
+to = "game_over.wav"
+
+
+# input config
+[input.keyboard]
+capture_events = true
+
+# server config
+[server]
+port = 8000 # The port on which the server will run 
+
+# pyodide config
+[pyodide]
+install_url = "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/"

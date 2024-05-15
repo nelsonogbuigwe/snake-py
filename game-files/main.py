@@ -32,14 +32,26 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 OBSTACLE_COLOR = (128, 128, 128)
 
+
 # Define the SnakeGame class
 class SnakeGame:
+    REGENERATE_EVENT = pygame.USEREVENT + 1
+
     def __init__(self):
+        self.game_over_sound = None
+        self.food_images = None
+        self.eat_sound = None
+        self.obstacle_image = None
         pygame.init()
+        global SCREEN_HEIGHT
+
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Snake Game")
         self.clock = pygame.time.Clock()
-        self.snake = [(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)]
+
+        SCREEN_HEIGHT = SCREEN_HEIGHT // GRID_SIZE * GRID_SIZE
+        self.snake = [(SCREEN_WIDTH // 2 // GRID_SIZE * GRID_SIZE, SCREEN_HEIGHT // 2 // GRID_SIZE * GRID_SIZE)]
+
         self.snake_body_image = None
         self.direction = 'RIGHT'
         self.difficulty = 'normal'  # Initial difficulty level
@@ -59,20 +71,23 @@ class SnakeGame:
         self.load_assets()  # Load compact PNG images
         self.opening_menu()
 
+        # Periodically regenerate obstacles
+        pygame.time.set_timer(self.REGENERATE_EVENT, 10000)
+
     def load_assets(self):
         # Load compact PNG images for snake body, food items, and obstacles
-        self.snake_body_image = pygame.image.load("snake_body.png").convert_alpha()
+        self.snake_body_image = pygame.image.load("assets/snake_body.png").convert_alpha()
         self.snake_body_image = pygame.transform.scale(self.snake_body_image, (GRID_SIZE, GRID_SIZE))
 
         self.food_images = {
-            'small': pygame.image.load("food.png").convert_alpha(),
-            'medium': pygame.image.load("food.png").convert_alpha(),
-            'large': pygame.image.load("food.png").convert_alpha()
+            'small': pygame.image.load("assets/food.png").convert_alpha(),
+            'medium': pygame.image.load("assets/food.png").convert_alpha(),
+            'large': pygame.image.load("assets/food.png").convert_alpha()
         }
         for size in self.food_images:
             self.food_images[size] = pygame.transform.scale(self.food_images[size], (GRID_SIZE, GRID_SIZE))
 
-        self.obstacle_image = pygame.image.load("obstacle.png").convert_alpha()
+        self.obstacle_image = pygame.image.load("assets/obstacle.png").convert_alpha()
         self.obstacle_image = pygame.transform.scale(self.obstacle_image, (GRID_SIZE, GRID_SIZE))
 
     def opening_menu(self):
@@ -112,8 +127,8 @@ class SnakeGame:
 
     def load_sounds(self):
         try:
-            self.eat_sound = pygame.mixer.Sound("eat.wav")
-            self.game_over_sound = pygame.mixer.Sound("game_over.wav")
+            self.eat_sound = pygame.mixer.Sound("assets/eat.wav")
+            self.game_over_sound = pygame.mixer.Sound("assets/game_over.wav")
             self.eat_sound.set_volume(0.2)  # Reduce volume for a subtle effect
             self.game_over_sound.set_volume(0.2)  # Reduce volume for a subtle effect
         except pygame.error:
@@ -121,9 +136,10 @@ class SnakeGame:
             self.eat_sound = None
             self.game_over_sound = None
 
-    def generate_obstacles(self):
+    @staticmethod
+    def generate_obstacles():
         obstacles = []
-        num_obstacles = 3  # Initial number of obstacles
+        num_obstacles = random.randint(1, 5)  # Initial number of obstacles
         for _ in range(num_obstacles):
             x = random.randrange(0, SCREEN_WIDTH, GRID_SIZE)
             y = random.randrange(0, SCREEN_HEIGHT, GRID_SIZE)
@@ -131,10 +147,11 @@ class SnakeGame:
         return obstacles
 
     def place_food(self):
-        x = random.randrange(0, SCREEN_WIDTH, GRID_SIZE)
-        y = random.randrange(0, SCREEN_HEIGHT, GRID_SIZE)
+        x = random.randrange(0, SCREEN_WIDTH // GRID_SIZE) * GRID_SIZE
+        y = random.randrange(0, SCREEN_HEIGHT // GRID_SIZE) * GRID_SIZE
+
         self.food_size = random.choice(list(FOOD_SIZES.keys()))  # Random food size
-        return (x, y, self.food_size)
+        return x, y, self.food_size
 
     def rotate_snake_body(self):
         if len(moves) > 0:
@@ -158,7 +175,7 @@ class SnakeGame:
             self.snake_body_image = pygame.transform.rotate(self.snake_body_image, -90)
         elif self.direction == 'RIGHT' and current_direction == 'DOWN':
             self.snake_body_image = pygame.transform.rotate(self.snake_body_image, 90)
-        
+
         moves.push(self.direction)
 
     def move(self):
@@ -167,6 +184,7 @@ class SnakeGame:
 
         head = self.snake[0]
         x, y = head
+
         if self.direction == 'UP':
             y -= GRID_SIZE
             self.rotate_snake_body()
@@ -180,8 +198,15 @@ class SnakeGame:
             x += GRID_SIZE
             self.rotate_snake_body()
 
+        if x < 0 or x >= SCREEN_WIDTH or y < 0 or y >= SCREEN_HEIGHT:
+            self.game_over = True
+            if self.game_over_sound:
+                self.game_over_sound.play()
+            self.save_highest_score()
+            return
+
         for f in self.food:
-            if (x, y) == f[:2]:
+            if abs(x - f[0]) < GRID_SIZE and abs(y - f[1]) < GRID_SIZE:
                 self.score += FOOD_POINTS.get(f[2], 1)
                 if self.eat_sound:
                     self.eat_sound.play()
@@ -193,13 +218,16 @@ class SnakeGame:
             if len(self.snake) > SHRINK_AMOUNT:
                 del self.snake[-SHRINK_AMOUNT:]
 
+        if any(abs(x - o[0]) < GRID_SIZE and abs(y - o[1]) < GRID_SIZE for o in self.obstacles):
+            self.game_over = True  # Game over on collision
+
         if self.food_size != 'small':
             self.timer_start = time.time()
         if (
                 x < 0 or x >= SCREEN_WIDTH or
                 y < 0 or y >= SCREEN_HEIGHT or
-                (x, y) in self.snake[1:] or
-                (x, y) in self.obstacles
+                any(abs(x - s[0]) < GRID_SIZE and abs(y - s[1]) < GRID_SIZE for s in self.snake[1:]) or
+                any(abs(x - o[0]) < GRID_SIZE and abs(y - o[1]) < GRID_SIZE for o in self.obstacles)
         ):
             if time.time() - self.timer_start > self.settings['collision_delay']:
                 self.game_over = True
@@ -229,6 +257,10 @@ class SnakeGame:
                     self.direction = 'RIGHT'
                 elif event.key == pygame.K_p:  # Pause functionality
                     self.is_paused = not self.is_paused
+            elif event.type == self.REGENERATE_EVENT:
+                self.obstacles = self.generate_obstacles()
+                self.food = [self.place_food() for _ in range(len(self.food))]
+                self.draw()
 
     def draw(self):
         self.screen.fill(BLACK)
@@ -258,11 +290,12 @@ class SnakeGame:
         self.screen.blit(game_over_text, (SCREEN_WIDTH // 2 - game_over_text.get_width() // 2,
                                           SCREEN_HEIGHT // 2 - game_over_text.get_height() // 2 - 30))
         self.screen.blit(score_text, (
-        SCREEN_WIDTH // 2 - score_text.get_width() // 2, SCREEN_HEIGHT // 2 - score_text.get_height() // 2))
+            SCREEN_WIDTH // 2 - score_text.get_width() // 2, SCREEN_HEIGHT // 2 - score_text.get_height() // 2))
         self.screen.blit(highest_score_text, (SCREEN_WIDTH // 2 - highest_score_text.get_width() // 2,
                                               SCREEN_HEIGHT // 2 - highest_score_text.get_height() // 2 + 30))
         self.screen.blit(restart_text, (
-        SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 - restart_text.get_height() // 2 + 60))
+            SCREEN_WIDTH // 2 - restart_text.get_width() // 2,
+            SCREEN_HEIGHT // 2 - restart_text.get_height() // 2 + 60))
         pygame.display.update()
 
     def reset_game(self):
@@ -293,7 +326,6 @@ class SnakeGame:
                         self.reset_game()
                         pygame.quit()
                         self.run()
-
 
 
 # Entry point of the program
