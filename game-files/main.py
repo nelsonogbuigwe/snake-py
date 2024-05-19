@@ -89,7 +89,7 @@ def main():
     surface = surface.convert()
 
     # Load assets
-    food_image = pygame.image.load('food.png')
+    food_image = pygame.image.load('assets/food.png')
     food_image = pygame.transform.scale(food_image, (GRIDSIZE+3, GRIDSIZE+3))
 
     # Create a font object
